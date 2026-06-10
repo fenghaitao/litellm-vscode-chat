@@ -1,0 +1,89 @@
+model_list:
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: claude-sonnet-4-20250514
+    litellm_params:
+      model: claude-sonnet-4-20250514
+      api_key: os.environ/ANTHROPIC_API_KEY
+  # DeepSeek V4 (litellm 1.88.1 has no built-in pricing for these, so we supply
+  # it here — required for spend tracking / budgets to compute correctly).
+  # Rates are USD per token (DeepSeek lists per-1M, divided by 1e6). 1M context,
+  # 384K max output. Both support thinking / non-thinking modes.
+  - model_name: deepseek-v4-flash
+    litellm_params:
+      model: deepseek/deepseek-v4-flash
+      api_key: os.environ/DEEPSEEK_API_KEY
+      input_cost_per_token: 0.00000014 # $0.14 / 1M (cache miss)
+      output_cost_per_token: 0.00000028 # $0.28 / 1M
+      cache_read_input_token_cost: 0.0000000028 # $0.0028 / 1M (cache hit)
+    model_info:
+      max_input_tokens: 1000000
+      max_output_tokens: 384000
+  - model_name: deepseek-v4-pro
+    litellm_params:
+      model: deepseek/deepseek-v4-pro
+      api_key: os.environ/DEEPSEEK_API_KEY
+      input_cost_per_token: 0.000000435 # $0.435 / 1M (cache miss)
+      output_cost_per_token: 0.00000087 # $0.87 / 1M
+      cache_read_input_token_cost: 0.000000003625 # $0.003625 / 1M (cache hit)
+    model_info:
+      max_input_tokens: 1000000
+      max_output_tokens: 384000
+
+  # GitHub Copilot chat models (auth handled by litellm's GitHub Copilot
+  # device-flow authenticator; no API key needed here).
+  - model_name: github_copilot/claude-opus-4.6
+    litellm_params:
+      model: github_copilot/claude-opus-4.6
+  - model_name: github_copilot/claude-opus-4.7
+    litellm_params:
+      model: github_copilot/claude-opus-4.7
+  - model_name: github_copilot/claude-opus-4.8
+    litellm_params:
+      model: github_copilot/claude-opus-4.8
+  - model_name: github_copilot/claude-sonnet-4.6
+    litellm_params:
+      model: github_copilot/claude-sonnet-4.6
+  - model_name: github_copilot/claude-haiku-4.5
+    litellm_params:
+      model: github_copilot/claude-haiku-4.5
+  - model_name: github_copilot/gpt-5.5
+    litellm_params:
+      model: github_copilot/gpt-5.5
+  - model_name: github_copilot/gpt-5.4
+    litellm_params:
+      model: github_copilot/gpt-5.4
+  - model_name: github_copilot/gpt-5.3-codex
+    litellm_params:
+      model: github_copilot/gpt-5.3-codex
+  - model_name: github_copilot/gpt-4.1
+    litellm_params:
+      model: github_copilot/gpt-4.1
+  - model_name: github_copilot/gpt-4o
+    litellm_params:
+      model: github_copilot/gpt-4o
+  - model_name: github_copilot/gpt-4o-mini
+    litellm_params:
+      model: github_copilot/gpt-4o-mini
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  # Postgres: enables persistent virtual keys, budgets, and spend tracking.
+  database_url: os.environ/DATABASE_URL
+  # Schema is created/updated by setup-litellm-proxy.sh (prisma db push), so
+  # skip the on-boot migration — it otherwise hangs/slows proxy startup.
+  disable_prisma_schema_update: true
+
+litellm_settings:
+  drop_params: true
+  # Redis: distributed spend / TPM / RPM counters (needed when running >1 worker)
+  # and powers the budget windows. Also enables exact-match response caching;
+  # tune with cache_params.ttl or restrict cache_params.supported_call_types.
+  cache: true
+  cache_params:
+    type: redis
+    host: os.environ/REDIS_HOST
+    port: os.environ/REDIS_PORT
+    password: os.environ/REDIS_PASSWORD

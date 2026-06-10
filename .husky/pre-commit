@@ -41,5 +41,9 @@ if (tM > eM || (tM === eM && tm > em)) {
 # Run linting
 bun run lint
 
-# Run tests
-bun run test
+# Run tests (vscode-test needs a display; use Xvfb when none is available)
+if [ -z "$DISPLAY" ] && command -v xvfb-run >/dev/null 2>&1; then
+	xvfb-run -a bun run test
+else
+	bun run test
+fi

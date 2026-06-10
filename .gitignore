@@ -211,3 +211,6 @@ $RECYCLE.BIN/
 *.lnk
 
 .husky/_/
+
+# Local LiteLLM proxy Python venv (not part of the extension)
+/.venv-litellm/

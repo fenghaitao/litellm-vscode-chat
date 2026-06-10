@@ -13,6 +13,7 @@ export default tseslint.config(
 		ignores: [
 			'.vscode-test',
 			'.worktrees',
+			'.venv-litellm',
 			'out',
 			'**/*.d.ts'
 		]

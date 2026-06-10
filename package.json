@@ -15,6 +15,7 @@
 		"@types/vscode": "^1.120.0",
 		"@vscode/test-cli": "^0.0.12",
 		"@vscode/test-electron": "^2.5.2",
+		"@vscode/vsce": "^3.9.2",
 		"eslint": "^10.4.0",
 		"husky": "^9.1.7",
 		"lint-staged": "^17.0.5",
@@ -155,6 +156,7 @@
 		"lint": "eslint",
 		"format": "prettier --write .",
 		"watch": "tsc -watch -p ./",
+		"package": "vsce package",
 		"mock-server": "node scripts/mock-litellm-server.js",
 		"test": "bun run compile && vscode-test --label unit",
 		"host-fidelity-test": "node scripts/host-fidelity-test.js"
