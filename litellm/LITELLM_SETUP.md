@@ -77,7 +77,9 @@ that environment.
 
 The committed config is set up for **budgets & rate-limits mode**. The
 `database_url` and the `cache` (Redis) blocks are what enable section 5 — for a
-stateless basic-mode proxy, simply delete those two blocks.
+stateless basic-mode proxy, simply delete those two blocks. The snippet below
+shows the structure; the committed file additionally contains the
+`github_copilot/*` model entries with credit-based pricing (see section 6).
 
 ```yaml
 model_list:
@@ -260,6 +262,63 @@ You can also cap throughput with `rpm_limit` / `tpm_limit` (per-minute) and
 2. **Fixed-reset window, not a true sliding window.** The counter resets every
    `budget_duration` from a reset timestamp, whereas Claude Code uses a rolling
    window. Behavior is very close but not identical at the reset boundary.
+
+## 6. GitHub Copilot models (credit-based pricing)
+
+The config also exposes `github_copilot/*` chat models through the proxy, with
+spend tracking that works in the same budget windows as DeepSeek.
+
+### How billing works
+
+GitHub moved Copilot to **credit-based billing**: 1 AI credit = $0.01, and each
+model has per-token rates (input / cached input / output — Anthropic models also
+have a cache-write rate). Rates are published at
+[docs.github.com → Copilot models and pricing](https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing).
+
+litellm (1.88.1, and upstream `main` as of June 2026) has **no built-in prices**
+for `github_copilot/*` — all entries are null and there is no upstream PR — so
+`litellm/litellm_config.yaml` supplies them per model, exactly like the DeepSeek
+V4 entries. Update those numbers if GitHub revises the tables.
+
+Notes on specific entries:
+
+- **GPT-5.4 / GPT-5.5** are priced at the *Default* tier. GitHub bills a higher
+  *Long context* tier for large inputs, but litellm encodes one flat rate per
+  entry — long-context usage is therefore under-counted locally.
+- **`gpt-4.1`, `gpt-4o`, `gpt-4o-mini`** have no published per-token rates
+  (legacy/included models) — litellm records **$0 spend** for them, so budgets
+  do not constrain these.
+
+### Auth
+
+No API key: litellm's `github_copilot` provider runs a one-time OAuth
+**device-code login** on first use (prints a `github.com/login/device` code —
+works over SSH). Tokens are cached in `~/.config/litellm/github_copilot/`.
+
+### Verifying model IDs and quota: `verify-copilot-models.sh`
+
+GitHub's docs use marketing names ("GPT-5.4 (Default)"), not API IDs. The
+ground truth is Copilot's `/models` endpoint. `./litellm/verify-copilot-models.sh`
+queries it using the endpoints documented by the bundled
+`copilot-api/` project (reverse-engineered Copilot proxy):
+
+1. Reuses the cached GitHub token (litellm's or copilot-api's) and exchanges it
+   at `api.github.com/copilot_internal/v2/token` for a short-lived bearer.
+2. Lists `api.githubcopilot.com/models` — exact model IDs, context/output
+   limits, capabilities (`--json` for the raw payload).
+3. Shows your plan's quota from `api.github.com/copilot_internal/user`.
+
+Verified mappings (2026-06): "GPT-5.4 (Default/Long context)" is the single ID
+`gpt-5.4` (400K ctx); Claude Opus 4.6–4.8 / Sonnet 4.6 are 264K ctx; Gemini 3.1
+Pro's ID carries a `-preview` suffix. Claude Fable 5, GPT-5.4 nano, Raptor mini
+and MAI-Code-1 were not available on this plan.
+
+### Relationship to GitHub's own metering
+
+GitHub already enforces plan limits server-side (this account: Copilot Business,
+`premium_interactions` 20K/month, monthly reset — shown by the verify script).
+Local litellm budgets add your own 5h/weekly *shape* on top; they do not replace
+GitHub's cap, and GitHub's cap does not respect your local windows.
 
 ## Troubleshooting: `"No connected db."`
 

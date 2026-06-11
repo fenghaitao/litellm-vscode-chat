@@ -8,6 +8,7 @@ const launchArgs = ["--user-data-dir", userDataDir];
 export default defineConfig([
 	{
 		label: "unit",
+		version: "1.124.0",
 		files: [
 			"out/test/*.test.js",
 			"out/test/shared/*.test.js",
@@ -24,6 +25,7 @@ export default defineConfig([
 	},
 	{
 		label: "host-fidelity",
+		version: "1.124.0",
 		files: "out/test/host-fidelity.test.js",
 		mocha: {
 			ui: "tdd",

@@ -34,39 +34,111 @@ model_list:
 
   # GitHub Copilot chat models (auth handled by litellm's GitHub Copilot
   # device-flow authenticator; no API key needed here).
+  #
+  # Pricing: litellm has no built-in rates for github_copilot/* (all null), so we
+  # supply GitHub's credit-based per-token prices (1 AI credit = $0.01; rates are
+  # USD per 1M from docs.github.com "models-and-pricing", divided by 1e6).
+  # GPT-5.4/5.5 use the Default tier; the Long-context tier (above ~128K input)
+  # bills higher but litellm can only encode one flat rate per entry.
+  # Anthropic rows include cache-write pricing (cache_creation_input_token_cost).
+  # Model IDs + context/output limits verified live via ./litellm/verify-copilot-models.sh.
   - model_name: github_copilot/claude-opus-4.6
     litellm_params:
       model: github_copilot/claude-opus-4.6
+      input_cost_per_token: 0.000005 # $5.00 / 1M
+      output_cost_per_token: 0.000025 # $25.00 / 1M
+      cache_read_input_token_cost: 0.0000005 # $0.50 / 1M
+      cache_creation_input_token_cost: 0.00000625 # $6.25 / 1M (cache write)
+    model_info:
+      max_input_tokens: 264000
+      max_output_tokens: 64000
   - model_name: github_copilot/claude-opus-4.7
     litellm_params:
       model: github_copilot/claude-opus-4.7
+      input_cost_per_token: 0.000005 # $5.00 / 1M
+      output_cost_per_token: 0.000025 # $25.00 / 1M
+      cache_read_input_token_cost: 0.0000005 # $0.50 / 1M
+      cache_creation_input_token_cost: 0.00000625 # $6.25 / 1M (cache write)
+    model_info:
+      max_input_tokens: 264000
+      max_output_tokens: 64000
   - model_name: github_copilot/claude-opus-4.8
     litellm_params:
       model: github_copilot/claude-opus-4.8
+      input_cost_per_token: 0.000005 # $5.00 / 1M
+      output_cost_per_token: 0.000025 # $25.00 / 1M
+      cache_read_input_token_cost: 0.0000005 # $0.50 / 1M
+      cache_creation_input_token_cost: 0.00000625 # $6.25 / 1M (cache write)
+    model_info:
+      max_input_tokens: 264000
+      max_output_tokens: 64000
   - model_name: github_copilot/claude-sonnet-4.6
     litellm_params:
       model: github_copilot/claude-sonnet-4.6
+      input_cost_per_token: 0.000003 # $3.00 / 1M
+      output_cost_per_token: 0.000015 # $15.00 / 1M
+      cache_read_input_token_cost: 0.0000003 # $0.30 / 1M
+      cache_creation_input_token_cost: 0.00000375 # $3.75 / 1M (cache write)
+    model_info:
+      max_input_tokens: 264000
+      max_output_tokens: 64000
   - model_name: github_copilot/claude-haiku-4.5
     litellm_params:
       model: github_copilot/claude-haiku-4.5
+      input_cost_per_token: 0.000001 # $1.00 / 1M
+      output_cost_per_token: 0.000005 # $5.00 / 1M
+      cache_read_input_token_cost: 0.0000001 # $0.10 / 1M
+      cache_creation_input_token_cost: 0.00000125 # $1.25 / 1M (cache write)
+    model_info:
+      max_input_tokens: 200000
+      max_output_tokens: 64000
   - model_name: github_copilot/gpt-5.5
     litellm_params:
       model: github_copilot/gpt-5.5
+      input_cost_per_token: 0.000005 # $5.00 / 1M (Default tier)
+      output_cost_per_token: 0.00003 # $30.00 / 1M
+      cache_read_input_token_cost: 0.0000005 # $0.50 / 1M
+    model_info:
+      max_input_tokens: 400000
+      max_output_tokens: 128000
   - model_name: github_copilot/gpt-5.4
     litellm_params:
       model: github_copilot/gpt-5.4
+      input_cost_per_token: 0.0000025 # $2.50 / 1M (Default tier)
+      output_cost_per_token: 0.000015 # $15.00 / 1M
+      cache_read_input_token_cost: 0.00000025 # $0.25 / 1M
+    model_info:
+      max_input_tokens: 400000
+      max_output_tokens: 128000
   - model_name: github_copilot/gpt-5.3-codex
     litellm_params:
       model: github_copilot/gpt-5.3-codex
+      input_cost_per_token: 0.00000175 # $1.75 / 1M
+      output_cost_per_token: 0.000014 # $14.00 / 1M
+      cache_read_input_token_cost: 0.000000175 # $0.175 / 1M
+    model_info:
+      max_input_tokens: 400000
+      max_output_tokens: 128000
+  # Legacy/base models below have no published per-token rates on GitHub's
+  # pricing page (included models) — litellm records $0 spend for them.
   - model_name: github_copilot/gpt-4.1
     litellm_params:
       model: github_copilot/gpt-4.1
+    model_info:
+      max_input_tokens: 128000
+      max_output_tokens: 16384
   - model_name: github_copilot/gpt-4o
     litellm_params:
       model: github_copilot/gpt-4o
+    model_info:
+      max_input_tokens: 128000
+      max_output_tokens: 4096
   - model_name: github_copilot/gpt-4o-mini
     litellm_params:
       model: github_copilot/gpt-4o-mini
+    model_info:
+      max_input_tokens: 128000
+      max_output_tokens: 4096
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
