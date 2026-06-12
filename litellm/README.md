@@ -1,16 +1,36 @@
-# manage-budget-key — issue LiteLLM virtual keys with Claude-Code-style budgets
+# LiteLLM budgeted proxy — Claude-Code-style 5h + weekly limits
 
-Three equivalent implementations of the same tool. Each mints (or updates) a
-**virtual key** on the local LiteLLM proxy with two layered spending caps:
+A local LiteLLM proxy that gives each model group its own **5-hour** and
+**weekly** spending caps. A request is rejected (HTTP 429 `budget_exceeded`) as
+soon as **either** cap is exhausted — mirroring Claude Code's two-tier limits.
 
 - a **weekly cap** — enforced on the *user* (aggregates across all their keys)
 - a **window cap** (default 5 hours) — enforced on the *key*
 
-A request is rejected (HTTP 429 `budget_exceeded`) as soon as **either** cap is
-exhausted — mirroring Claude Code's 5h + weekly two-tier limits.
+## Quick start — one command
+
+If you just want it up with a 5h and a weekly dollar limit, run:
+
+```bash
+./litellm/litellm-up.ts 3 20      # $3 / 5h  +  $20 / week  (per group)
+```
+
+[`litellm-up.ts`](litellm-up.ts) (bun) does the whole flow: sets up
+PostgreSQL + Redis if needed, starts the proxy in the background if it isn't
+running, then ensures a budgeted key for each group (deepseek + copilot) —
+**created if missing, updated in place otherwise**, so re-running with new
+limits never rotates a secret. It prints the keys to paste into the extension.
+Each group gets its own user, so the weekly buckets are independent.
+
+The sections below cover the individual pieces `litellm-up.ts` orchestrates.
 
 > Full proxy setup (Postgres/Redis, pricing, troubleshooting) lives in
-> [LITELLM_SETUP.md](LITELLM_SETUP.md). This README covers only the key tooling.
+> [LITELLM_SETUP.md](LITELLM_SETUP.md).
+
+## manage-budget-key — mint / update / list keys
+
+Three equivalent implementations of the key tool. Each mints (or updates) a
+**virtual key** on the proxy with the two layered caps above.
 
 ## Pick an implementation
 
@@ -26,8 +46,9 @@ list; the Bash original is kept for curl-only environments.
 
 ## Prerequisites
 
-- The proxy is running: `./litellm/start-litellm-proxy.sh` (default
-  `http://localhost:4000`; override with the `BASE` env var).
+- The proxy is running: `./litellm/start-litellm-proxy.sh` (or the equivalent
+  `.py` / `.ts` port; default `http://localhost:4000`; override with `BASE`).
+  One-time DB setup: `./litellm/setup-litellm-proxy.{sh,py,ts}`.
 - `LITELLM_MASTER_KEY` is exported, or present in `.env` at the repo root
   (the scripts read it from there automatically). The master key is required —
   these scripts are admin tooling.
@@ -35,12 +56,14 @@ list; the Bash original is kept for curl-only environments.
 ## Usage
 
 ```text
-manage-budget-key.{sh,py,ts} [--create|--update|--list] [--group G] [--models a,b]
+manage-budget-key.{sh,py,ts} [--create|--update|--ensure|--list] [--group G] [--models a,b]
                              [user_id] [weekly_usd] [window_usd] [window]
 ```
 
 Defaults: `--create`, `--group deepseek`, `user_id=haitao`, `weekly_usd=20`,
 `window_usd=3`, `window=5h`. (`--group`/`--models`/`--list` are `.py`/`.ts` only.)
+`--ensure` = update if the key exists, else create — the re-runnable mode
+[`litellm-up.ts`](litellm-up.ts) uses.
 `window`/`WEEKLY_DURATION` accept litellm durations: `s, m, h, d, w, mo`.
 
 ### Common tasks
@@ -96,18 +119,22 @@ Paste the printed `sk-...` into the VS Code extension (**Manage LiteLLM
 Provider** → API key, Base URL `http://localhost:4000`). Don't chat with the
 master key — it bypasses every budget.
 
-## `--create` vs `--update`
+## `--create` vs `--update` vs `--ensure`
 
-| | `--create` (default) | `--update` |
-| --- | --- | --- |
-| Key value (`sk-...`) | **new** — re-paste into the extension | unchanged |
-| Accumulated window spend | resets to $0 | **preserved** |
-| Old key | **revoked** (rotation) | n/a |
-| Use when | issuing the first key, or rotating a leaked/lost secret | adjusting limits |
+| | `--create` (default) | `--update` | `--ensure` |
+| --- | --- | --- | --- |
+| Key value (`sk-...`) | **new** — re-paste | unchanged | unchanged if it exists, else new |
+| Accumulated window spend | resets to $0 | **preserved** | preserved if it exists |
+| Old key | **revoked** (rotation) | n/a | revoked only when creating |
+| Use when | issuing / rotating a secret | adjusting limits | re-runnable automation |
 
 `--create` always **revokes the previous key first**, so there is exactly one
 valid key per user per group — re-running can't accumulate keys, each with its
 own fresh 5h window (which would otherwise let usage dodge the window cap).
+
+`--ensure` = "update if it exists, else create" — the idempotent mode
+[`litellm-up.ts`](litellm-up.ts) uses so changing a limit never forces a
+re-paste.
 
 ## How it works
 

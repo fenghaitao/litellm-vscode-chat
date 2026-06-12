@@ -19,9 +19,11 @@
 #   --update   Change the budgets on the EXISTING key in place. Same sk-...
 #              value, accumulated spend and reset window are preserved.
 #              Use to bump a limit without re-pasting anything.
+#   --ensure   Update if the key exists, else create (re-runnable).
+#   --list     Table of all managed keys (any group; see also the .py/.ts ports).
 #
 # Usage:
-#   ./litellm/manage-budget-key.sh [--create|--update] [user_id] [weekly_usd] [window_usd] [window]
+#   ./litellm/manage-budget-key.sh [--create|--update|--ensure|--list] [user_id] [weekly_usd] [window_usd] [window]
 #
 # Defaults: user_id=haitao  weekly_usd=20  window_usd=3  window=5h
 # Examples:
@@ -43,8 +45,9 @@ MODE="create"
 case "${1:-}" in
   --create) MODE="create"; shift;;
   --update) MODE="update"; shift;;
+  --ensure) MODE="ensure"; shift;;
   --list) MODE="list"; shift;;
-  --*) echo "ERROR: unknown flag '$1' (expected --create, --update or --list)" >&2; exit 1;;
+  --*) echo "ERROR: unknown flag '$1' (expected --create, --update, --ensure or --list)" >&2; exit 1;;
 esac
 
 USER_ID="${1:-haitao}"
@@ -150,6 +153,11 @@ for k in ks:
         print(k.get('token') or ''); break
 "
 }
+
+# --ensure: update in place if the key already exists, otherwise create it.
+if [ "$MODE" = "ensure" ]; then
+  if [ -n "$(existing_key_hash)" ]; then MODE="update"; else MODE="create"; fi
+fi
 
 # -------------------------------------------------------------------- UPDATE
 if [ "$MODE" = "update" ]; then

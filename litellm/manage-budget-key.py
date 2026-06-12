@@ -15,6 +15,8 @@ Modes:
                        NEW one. New sk-... value, window spend restarts at $0.
   --update             Change the budgets on the EXISTING key in place. Same
                        sk-... value; accumulated spend and reset window kept.
+  --ensure             Update if the key exists, else create. Re-runnable; this
+                       is what litellm-up.ts uses (no rotation on limit change).
   --list               Show all managed budget keys as a table (budgets + spend;
                        the secret is never stored, so only a masked key is shown).
                        Optional --group filters to one group.
@@ -30,8 +32,8 @@ Note: the weekly cap lives on the USER, so it aggregates across all of that
 user's keys/groups; user-level model access is the union of all groups granted.
 
 Usage:
-  ./litellm/manage-budget-key.py [--create|--update] [--group G] [--models a,b]
-                                 [user_id] [weekly_usd] [window_usd] [window]
+  ./litellm/manage-budget-key.py [--create|--update|--ensure|--list] [--group G]
+                                 [--models a,b] [user_id] [weekly_usd] [window_usd] [window]
 
 Defaults: user_id=haitao  weekly_usd=20  window_usd=3  window=5h
 
@@ -205,6 +207,7 @@ def main() -> None:
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--create", action="store_true", help="rotate: revoke old key, mint a new one (default)")
     mode.add_argument("--update", action="store_true", help="edit budgets in place; key value and spend preserved")
+    mode.add_argument("--ensure", action="store_true", help="update if the key exists, else create (re-runnable)")
     mode.add_argument("--list", action="store_true", help="list all managed budget keys as a table (no secrets)")
     p.add_argument("--group", choices=sorted(GROUP_PREFIXES), default="deepseek", help="model group (default: deepseek)")
     p.add_argument("--models", help="comma-separated explicit model list (overrides --group's list)")
@@ -225,6 +228,12 @@ def main() -> None:
     alias = f"{args.group}-budget-{args.user_id}"
     models = resolve_models(base, mk, args.group, args.models)
     exists, user_models, token_hash = user_state(base, mk, args.user_id, alias)
+    # --ensure: update in place if the key already exists, otherwise create it.
+    if args.ensure:
+        if token_hash:
+            args.update = True
+        else:
+            args.create = True
     # Union with the user's current model access so granting one group doesn't
     # revoke another (the weekly cap stays a per-user aggregate across groups).
     merged_models = sorted(set(user_models) | set(models))

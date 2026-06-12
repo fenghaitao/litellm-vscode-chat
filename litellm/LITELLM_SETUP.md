@@ -140,6 +140,9 @@ litellm_settings:
 ./litellm/start-litellm-proxy.sh 8000     # custom port
 ```
 
+This script also has Python and TypeScript ports with identical behavior:
+`./litellm/start-litellm-proxy.py` and `./litellm/start-litellm-proxy.ts` (bun).
+
 The script loads `.env`, warns about placeholder keys, and prints the master
 key to use in the extension. Keep this terminal running — Copilot Chat calls the
 proxy live.
@@ -188,10 +191,13 @@ models.
 ### Install and configure the databases
 
 Run the setup script (native apt install of PostgreSQL + Redis — no Docker,
-idempotent, safe to re-run):
+idempotent, safe to re-run). It comes in three equivalent implementations —
+pick whichever runtime you prefer:
 
 ```bash
-./litellm/setup-litellm-proxy.sh
+./litellm/setup-litellm-proxy.sh    # Bash
+./litellm/setup-litellm-proxy.py    # Python (stdlib only)
+./litellm/setup-litellm-proxy.ts    # TypeScript (bun)
 ```
 
 It:

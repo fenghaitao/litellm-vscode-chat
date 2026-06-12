@@ -15,8 +15,10 @@
  *                        a NEW one. New sk-... value, window spend restarts at $0.
  *   --update             Change the budgets on the EXISTING key in place. Same
  *                        sk-... value; accumulated spend and reset window kept.
+ *   --ensure             Update if the key exists, else create (re-runnable;
+ *                        used by litellm-up.ts — no rotation on limit change).
  *   --list               Show all managed budget keys as a table (budgets +
- *                        spend; only a masked key is shown). --group filters.
+ *                        spend; full key from the local store). --group filters.
  *
  * Model groups (--group, default "deepseek"):
  *   deepseek  -> models from the proxy whose id starts with "deepseek-"
@@ -29,8 +31,8 @@
  * that user's keys/groups; user-level model access is the union of all groups.
  *
  * Usage:
- *   ./litellm/manage-budget-key.ts [--create|--update] [--group G] [--models a,b]
- *                                  [user_id] [weekly_usd] [window_usd] [window]
+ *   ./litellm/manage-budget-key.ts [--create|--update|--ensure|--list] [--group G]
+ *                                  [--models a,b] [user_id] [weekly_usd] [window_usd] [window]
  *
  * Defaults: user_id=haitao  weekly_usd=20  window_usd=3  window=5h
  *
@@ -77,7 +79,7 @@ function fail(msg: string): never {
 
 // ---------------------------------------------------------------- arg parse
 interface Args {
-	mode: "create" | "update" | "list";
+	mode: "create" | "update" | "list" | "ensure";
 	group: string;
 	groupExplicit: boolean;
 	models?: string;
@@ -102,6 +104,7 @@ function parseArgs(argv: string[]): Args {
 		const t = argv[i];
 		if (t === "--create") a.mode = "create";
 		else if (t === "--update") a.mode = "update";
+		else if (t === "--ensure") a.mode = "ensure";
 		else if (t === "--list") a.mode = "list";
 		else if (t === "--group") {
 			const v = argv[++i];
@@ -113,10 +116,10 @@ function parseArgs(argv: string[]): Args {
 			a.models = argv[++i] ?? fail("ERROR: --models needs a comma-separated list");
 		} else if (t === "--help" || t === "-h") {
 			console.log(
-				"Usage: manage-budget-key.ts [--create|--update|--list] [--group deepseek|copilot] [--models a,b] [user_id] [weekly_usd] [window_usd] [window]"
+				"Usage: manage-budget-key.ts [--create|--update|--ensure|--list] [--group deepseek|copilot] [--models a,b] [user_id] [weekly_usd] [window_usd] [window]"
 			);
 			process.exit(0);
-		} else if (t.startsWith("--")) fail(`ERROR: unknown flag '${t}' (expected --create, --update or --list)`);
+		} else if (t.startsWith("--")) fail(`ERROR: unknown flag '${t}' (expected --create, --update, --ensure or --list)`);
 		else pos.push(t);
 	}
 	if (pos[0]) a.userId = pos[0];
@@ -260,6 +263,8 @@ if (args.mode === "list") {
 const alias = `${args.group}-budget-${args.userId}`;
 const models = await resolveModels(args.group, args.models);
 const { exists, userModels, tokenHash } = await userState(args.userId, alias);
+// --ensure: update in place if the key already exists, otherwise create it.
+if (args.mode === "ensure") args.mode = tokenHash ? "update" : "create";
 // Union with current access so granting one group doesn't revoke another.
 const mergedModels = [...new Set([...userModels, ...models])].sort();
 

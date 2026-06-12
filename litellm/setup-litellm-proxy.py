@@ -1,0 +1,196 @@
+#!/usr/bin/env python3
+"""
+setup-litellm-proxy.py
+----------------------
+One-shot, idempotent setup of the databases LiteLLM needs for budgets and
+rate limiting (Claude-Code-style 5h / weekly windows):
+
+  - PostgreSQL  -> persistent virtual keys, budgets, spend tracking
+  - Redis       -> distributed spend / TPM / RPM counters across workers
+
+Native apt install (no Docker). Tested on Ubuntu 24.04 + systemd.
+Re-running is safe: existing packages, roles, and generated passwords are reused.
+
+Output: writes connection details to .env.litellm-db (chmod 600, git-ignored).
+After this, run ./litellm/start-litellm-proxy.py — LiteLLM auto-creates its
+tables on first boot.
+
+(Equivalent to setup-litellm-proxy.sh / .ts.)
+"""
+
+import os
+import secrets
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+os.chdir(ROOT)
+
+PG_DB = "litellm_proxy"
+PG_USER = "litellm"
+PG_HOST = "127.0.0.1"
+PG_PORT = "5432"
+REDIS_HOST = "127.0.0.1"
+REDIS_PORT = "6379"
+ENV_FILE = ROOT / ".env.litellm-db"
+REDIS_CONF = "/etc/redis/redis.conf"
+DATABASE_URL = ""  # filled in below
+
+
+def log(msg: str) -> None:
+    print(f"\n\033[1;34m==>\033[0m {msg}")
+
+
+def die(msg: str) -> "None":
+    print(msg, file=sys.stderr)
+    sys.exit(1)
+
+
+def have(cmd: str) -> bool:
+    return shutil.which(cmd) is not None
+
+
+def run(cmd, **kw):
+    """Run a command, raising on non-zero exit (like `set -e`)."""
+    return subprocess.run(cmd, check=True, **kw)
+
+
+def genpw() -> str:
+    return secrets.token_hex(16)
+
+
+# 0. Sanity: this script needs sudo and apt (Debian/Ubuntu).
+if not have("apt-get"):
+    die("ERROR: apt-get not found. This script targets Debian/Ubuntu.")
+if subprocess.run(["sudo", "-n", "true"], capture_output=True).returncode != 0:
+    print("NOTE: sudo may prompt for your password during installation.", file=sys.stderr)
+
+# 1. Reuse previously generated passwords if the env file already exists.
+PG_PASSWORD = ""
+REDIS_PASSWORD = ""
+if ENV_FILE.is_file():
+    log(f"Reusing existing credentials from {ENV_FILE.name}")
+    for line in ENV_FILE.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            k, v = line.split("=", 1)
+            if k == "PG_PASSWORD":
+                PG_PASSWORD = v
+            elif k == "REDIS_PASSWORD":
+                REDIS_PASSWORD = v
+PG_PASSWORD = PG_PASSWORD or genpw()
+REDIS_PASSWORD = REDIS_PASSWORD or genpw()
+
+# 2. Install PostgreSQL and Redis if missing.
+to_install = [pkg for pkg, cmd in (("postgresql", "psql"), ("redis-server", "redis-server")) if not have(cmd)]
+if to_install:
+    log("Installing: " + " ".join(to_install))
+    run(["sudo", "apt-get", "update", "-y"])
+    run(
+        ["sudo", "apt-get", "install", "-y", *to_install],
+        env={**os.environ, "DEBIAN_FRONTEND": "noninteractive"},
+    )
+else:
+    log("PostgreSQL and Redis already installed — skipping apt install")
+
+# 3. Ensure both services are enabled and running.
+log("Enabling and starting services")
+run(["sudo", "systemctl", "enable", "--now", "postgresql"])
+run(["sudo", "systemctl", "enable", "--now", "redis-server"])
+
+# 4. Create the PostgreSQL role and database (idempotent).
+log(f"Configuring PostgreSQL role '{PG_USER}' and database '{PG_DB}'")
+role_sql = f"""DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{PG_USER}') THEN
+    CREATE ROLE {PG_USER} LOGIN PASSWORD '{PG_PASSWORD}';
+  ELSE
+    ALTER ROLE {PG_USER} WITH LOGIN PASSWORD '{PG_PASSWORD}';
+  END IF;
+END
+$$;"""
+run(["sudo", "-u", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-q"], input=role_sql, text=True)
+# CREATE DATABASE can't run inside a DO/transaction block, so guard it.
+db_exists = subprocess.run(
+    ["sudo", "-u", "postgres", "psql", "-tAc", f"SELECT 1 FROM pg_database WHERE datname = '{PG_DB}'"],
+    capture_output=True,
+    text=True,
+).stdout
+if "1" not in db_exists:
+    run(["sudo", "-u", "postgres", "psql", "-v", "ON_ERROR_STOP=1", "-c", f"CREATE DATABASE {PG_DB} OWNER {PG_USER};"])
+
+# 5. Set a Redis password (requirepass) so local processes can't read counters.
+log("Configuring Redis authentication")
+if subprocess.run(["sudo", "test", "-f", REDIS_CONF]).returncode == 0:
+    already = subprocess.run(["sudo", "grep", "-qxF", f"requirepass {REDIS_PASSWORD}", REDIS_CONF]).returncode == 0
+    if not already:
+        run(["sudo", "sed", "-i", "/^requirepass /d", REDIS_CONF])  # drop any active requirepass
+        run(["sudo", "tee", "-a", REDIS_CONF], input=f"requirepass {REDIS_PASSWORD}\n", text=True, stdout=subprocess.DEVNULL)
+        run(["sudo", "systemctl", "restart", "redis-server"])
+else:
+    print(f"WARNING: {REDIS_CONF} not found; Redis left without a password.", file=sys.stderr)
+    REDIS_PASSWORD = ""
+
+# 6. Write the generated connection details (git-ignored via .env.*).
+DATABASE_URL = f"postgresql://{PG_USER}:{PG_PASSWORD}@{PG_HOST}:{PG_PORT}/{PG_DB}"
+log(f"Writing {ENV_FILE.name}")
+ENV_FILE.write_text(
+    "# Generated by setup-litellm-proxy — DO NOT COMMIT (matched by .gitignore '.env.*').\n"
+    "# Sourced automatically by start-litellm-proxy.\n"
+    f"PG_PASSWORD={PG_PASSWORD}\n"
+    f"REDIS_PASSWORD={REDIS_PASSWORD}\n"
+    f"DATABASE_URL={DATABASE_URL}\n"
+    f"REDIS_HOST={REDIS_HOST}\n"
+    f"REDIS_PORT={REDIS_PORT}\n"
+)
+ENV_FILE.chmod(0o600)
+
+# 7. Create / update LiteLLM's tables (prisma db push). We own the schema here
+#    so the proxy can run with `disable_prisma_schema_update: true`. Re-run this
+#    script after upgrading litellm to pick up schema changes.
+log("Creating/updating LiteLLM tables (prisma db push)")
+schema = next(ROOT.glob(".venv-litellm/lib/python3.*/site-packages/litellm/proxy/schema.prisma"), None)
+prisma = ROOT / ".venv-litellm/bin/prisma"
+if schema and os.access(prisma, os.X_OK):
+    run(
+        [str(prisma), "db", "push", "--schema", str(schema), "--accept-data-loss", "--skip-generate"],
+        env={**os.environ, "DATABASE_URL": DATABASE_URL, "PATH": f"{ROOT}/.venv-litellm/bin:{os.environ.get('PATH', '')}"},
+    )
+else:
+    print("WARNING: prisma CLI or schema not found; tables will be created on first proxy boot.", file=sys.stderr)
+
+# 8. Verify connectivity.
+log("Verifying PostgreSQL connection")
+r = subprocess.run(
+    ["psql", "-h", PG_HOST, "-p", PG_PORT, "-U", PG_USER, "-d", PG_DB, "-tAc", "SELECT 'postgres connection OK'"],
+    env={**os.environ, "PGPASSWORD": PG_PASSWORD},
+    capture_output=True,
+    text=True,
+)
+if r.returncode != 0:
+    die("ERROR: cannot connect to Postgres")
+print(r.stdout.strip())
+
+log("Verifying Redis connection")
+redis_env = {**os.environ}
+if REDIS_PASSWORD:
+    redis_env["REDISCLI_AUTH"] = REDIS_PASSWORD
+print(run(["redis-cli", "-h", REDIS_HOST, "-p", REDIS_PORT, "ping"], env=redis_env, capture_output=True, text=True).stdout.strip())
+
+print(
+    f"""
+✅ Databases ready.
+
+  PostgreSQL : {PG_HOST}:{PG_PORT}  db={PG_DB}  user={PG_USER}
+  Redis      : {REDIS_HOST}:{REDIS_PORT}  (password set)
+  Credentials: {ENV_FILE.name}
+
+Next steps:
+  1. Make sure litellm/litellm_config.yaml has 'database_url: os.environ/DATABASE_URL'
+     and the redis cache block (already configured if you used the provided config).
+  2. Start the proxy:   ./litellm/start-litellm-proxy.py
+     (LiteLLM auto-creates its tables on first boot.)
+  3. Create budget-scoped keys — see litellm/LITELLM_SETUP.md "Budgets & rate limits"."""
+)
