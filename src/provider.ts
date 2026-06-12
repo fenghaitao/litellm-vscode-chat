@@ -27,6 +27,7 @@ export class LiteLLMChatModelProvider implements LanguageModelChatProvider {
 	private _chatEndpoints: { model: string; modelMaxPromptTokens: number }[] = [];
 	private _promptCachingSupport = new Map<string, boolean>();
 	private _statusCallback?: (status: AggregatedStatus) => void;
+	private _requestCompleteCallback?: () => void;
 	private _hasShownNoConfigNotification = false;
 	private _toolCallIdCounter = 0;
 	private _modelRoutes = new Map<string, ModelRoute>();
@@ -41,6 +42,10 @@ export class LiteLLMChatModelProvider implements LanguageModelChatProvider {
 
 	setStatusCallback(callback: (status: AggregatedStatus) => void): void {
 		this._statusCallback = callback;
+	}
+
+	setRequestCompleteCallback(callback: () => void): void {
+		this._requestCompleteCallback = callback;
 	}
 
 	setServerProvider(getServers: () => Promise<ServerWithKey[]>): void {
@@ -266,6 +271,10 @@ export class LiteLLMChatModelProvider implements LanguageModelChatProvider {
 		} catch (err) {
 			this.logError("Chat request failed", err);
 			throw err;
+		} finally {
+			// Notify even on failure: a budget_exceeded rejection or a partial
+			// stream may still have changed the recorded spend.
+			this._requestCompleteCallback?.();
 		}
 	}
 

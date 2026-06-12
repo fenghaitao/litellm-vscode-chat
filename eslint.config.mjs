@@ -15,7 +15,12 @@ export default tseslint.config(
 			'.worktrees',
 			'.venv-litellm',
 			'out',
-			'**/*.d.ts'
+			'**/*.d.ts',
+			// Standalone proxy tooling (run via bun/python, not extension source)
+			'litellm',
+			// Vendored reference clones with their own upstreams
+			'claude-code-usage',
+			'copilot-api'
 		]
 	},
 	{

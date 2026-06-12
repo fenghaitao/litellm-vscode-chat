@@ -214,3 +214,14 @@ $RECYCLE.BIN/
 
 # Local LiteLLM proxy Python venv (not part of the extension)
 /.venv-litellm/
+
+# Local plaintext store of minted virtual-key secrets (manage-budget-key --list)
+.litellm-budget-keys.json
+
+# Vendored reference clones (their own upstream repos; not part of this extension)
+/claude-code-usage/
+/copilot-api/
+
+# Stray JS build artifacts from the TS budget-key script (run via bun, no emit needed)
+/litellm/*.js
+/litellm/*.js.map

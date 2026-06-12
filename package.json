@@ -65,6 +65,14 @@
 			{
 				"command": "litellm.reportIssue",
 				"title": "LiteLLM: Report Issue"
+			},
+			{
+				"command": "litellm.budgetRefresh",
+				"title": "LiteLLM: Refresh Budget Status"
+			},
+			{
+				"command": "litellm.budgetToggleMode",
+				"title": "LiteLLM: Toggle Budget View (Key / User / Both)"
 			}
 		],
 		"configuration": {
@@ -95,6 +103,27 @@
 					"type": "boolean",
 					"default": true,
 					"description": "Enable prompt caching for supported models (currently Anthropic Claude). Caches the system prompt to reduce costs and improve response times. Only affects models that advertise prompt caching support."
+				},
+				"litellm-vscode-chat.budgetStatus.enabled": {
+					"type": "boolean",
+					"default": true,
+					"description": "Show LiteLLM virtual-key budget usage (e.g. $3/5h key window + $20/1w user window) in the status bar. Hidden automatically when no configured server uses a budgeted key."
+				},
+				"litellm-vscode-chat.budgetStatus.refreshIntervalSeconds": {
+					"type": "number",
+					"default": 300,
+					"minimum": 60,
+					"description": "How often to refresh budget usage from the proxy (seconds). The bar also refreshes shortly after each chat response."
+				},
+				"litellm-vscode-chat.budgetStatus.defaultMode": {
+					"type": "string",
+					"enum": [
+						"window",
+						"weekly",
+						"both"
+					],
+					"default": "both",
+					"description": "Which budget window(s) to show in the status bar: the key-level window (e.g. 5h), the user-level window (e.g. 1w), or both."
 				},
 				"litellm-vscode-chat.modelParameters": {
 					"type": "object",

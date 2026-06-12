@@ -235,16 +235,21 @@ MK=$LITELLM_MASTER_KEY
 
 # Weekly bucket — a user with a $20 / 7-day budget, restricted to DeepSeek.
 curl -s $BASE/user/new -H "Authorization: Bearer $MK" -H 'Content-Type: application/json' \
-  -d '{"user_id":"alice","max_budget":20,"budget_duration":"1w",
+  -d '{"user_id":"haitao","max_budget":20,"budget_duration":"1w",
        "models":["deepseek-v4-flash","deepseek-v4-pro"]}'
 
 # 5-hour bucket — a key under that user with a $3 / 5-hour budget.
 curl -s $BASE/key/generate -H "Authorization: Bearer $MK" -H 'Content-Type: application/json' \
-  -d '{"user_id":"alice","max_budget":3,"budget_duration":"5h",
+  -d '{"user_id":"haitao","max_budget":3,"budget_duration":"5h",
        "models":["deepseek-v4-flash","deepseek-v4-pro"]}'
 ```
 
-These two calls are wrapped by `./litellm/create-deepseek-key.sh` (see below).
+These two calls are wrapped by `manage-budget-key` (see below), available in
+three equivalent implementations: `./litellm/manage-budget-key.sh` (Bash,
+DeepSeek-only), `./litellm/manage-budget-key.py` (Python, stdlib only) and
+`./litellm/manage-budget-key.ts` (TypeScript, run with bun). The Python and
+TypeScript ports additionally support `--group deepseek|copilot`; the Bash
+original is DeepSeek-only.
 
 The returned `key` (an `sk-...`) is what you hand to the end user / put in the
 extension. It blocks when **either** limit is hit: $3 per rolling 5 hours, or
@@ -253,6 +258,34 @@ amounts to taste; `budget_duration` accepts `s, m, h, d, w, mo`.
 
 You can also cap throughput with `rpm_limit` / `tpm_limit` (per-minute) and
 `max_parallel_requests` on the same `key/generate` call.
+
+**`manage-budget-key` — modes and model groups:**
+
+```bash
+./litellm/manage-budget-key.py                              # --create: deepseek key for haitao
+./litellm/manage-budget-key.py --update haitao 20 5         # change caps in place, keep key
+./litellm/manage-budget-key.py --group copilot haitao 30 5  # copilot-scoped key
+./litellm/manage-budget-key.ts --create bob 50 8 5h         # TypeScript port, same CLI
+```
+
+- **`--group deepseek|copilot`** (default `deepseek`) picks which models the key
+  can access. The lists are fetched **live from the proxy** (`/v1/models`,
+  filtered by prefix `deepseek-` / `github_copilot/`), so they stay in sync with
+  `litellm_config.yaml`; `--models a,b,c` overrides explicitly. The alias becomes
+  `<group>-budget-<user_id>`, so one user can hold one key per group. User-level
+  model access is the **union** of all groups granted, and the weekly cap lives
+  on the user — i.e. it aggregates across that user's groups.
+- **`--create`** (default) **revokes the previous key for the user+group before
+  minting a new one**, so there's always exactly one valid key per user per
+  group — it *rotates* rather than accumulating keys. This matters because each
+  key carries its *own* 5-hour window; without rotation, many keys could spread
+  usage to sidestep the 5h cap (the weekly cap is user-level and stays
+  aggregate-safe regardless). Trade-off: you get a new secret, so re-paste it
+  into the extension, and the 5h spend resets to $0.
+- **`--update`** changes the caps on the **existing** key in place (found via the
+  alias, identified by its hashed token — no plaintext needed). The `sk-...` value,
+  accumulated spend, and reset window are all **preserved** — nothing to re-paste.
+  Use this to adjust a limit without rotating the secret.
 
 ### Two caveats
 
