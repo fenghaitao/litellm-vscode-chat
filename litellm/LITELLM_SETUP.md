@@ -147,6 +147,12 @@ The script loads `.env`, warns about placeholder keys, and prints the master
 key to use in the extension. Keep this terminal running — Copilot Chat calls the
 proxy live.
 
+To stop it (handy when it was started in the background by `litellm-up.ts`):
+
+```bash
+./litellm/stop-litellm-proxy.sh           # or .py / .ts; add a port to target a non-4000 proxy
+```
+
 ## 4. Connect the extension
 
 1. Command Palette (`Ctrl+Shift+P`) → **Manage LiteLLM Provider**

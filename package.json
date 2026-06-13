@@ -73,6 +73,10 @@
 			{
 				"command": "litellm.budgetToggleMode",
 				"title": "LiteLLM: Toggle Budget View (Key / User / Both)"
+			},
+			{
+				"command": "litellm.importBudgetKeys",
+				"title": "LiteLLM: Import Budget Keys as Servers"
 			}
 		],
 		"configuration": {
@@ -124,6 +128,21 @@
 					],
 					"default": "both",
 					"description": "Which budget window(s) to show in the status bar: the key-level window (e.g. 5h), the user-level window (e.g. 1w), or both."
+				},
+				"litellm-vscode-chat.budgetKeys.autoImport": {
+					"type": "boolean",
+					"default": false,
+					"description": "Automatically register the budgeted keys minted by litellm-up.ts (from .litellm-budget-keys.json) as server entries on startup and whenever that file changes. When off, use the 'LiteLLM: Import Budget Keys as Servers' command manually."
+				},
+				"litellm-vscode-chat.budgetKeys.baseUrl": {
+					"type": "string",
+					"default": "http://localhost:4000",
+					"description": "Base URL of the local LiteLLM proxy that the imported budget keys belong to."
+				},
+				"litellm-vscode-chat.budgetKeys.path": {
+					"type": "string",
+					"default": "",
+					"description": "Path to the .litellm-budget-keys.json secrets store. Empty = auto-detect it in the open workspace folder(s)."
 				},
 				"litellm-vscode-chat.modelParameters": {
 					"type": "object",

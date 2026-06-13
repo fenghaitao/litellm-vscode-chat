@@ -27,6 +27,24 @@ The sections below cover the individual pieces `litellm-up.ts` orchestrates.
 > Full proxy setup (Postgres/Redis, pricing, troubleshooting) lives in
 > [LITELLM_SETUP.md](LITELLM_SETUP.md).
 
+## Getting the keys into the VS Code extension (no paste)
+
+`litellm-up.ts` writes each minted secret to `.litellm-budget-keys.json`. The
+extension reads that file and registers a **server entry per group** for you —
+a CLI can't, because the server registry is encrypted by VS Code:
+
+- **One click:** run the command **"LiteLLM: Import Budget Keys as Servers"**.
+- **Hands-free:** set `litellm-vscode-chat.budgetKeys.autoImport: true` — the
+  extension then imports on startup and re-imports whenever the file changes, so
+  re-running `litellm-up.ts` keeps the extension in sync automatically.
+
+Re-importing is idempotent: a server with the group's label is **updated** (key
+swapped) rather than duplicated. Related settings:
+`budgetKeys.baseUrl` (default `http://localhost:4000`) and `budgetKeys.path`
+(empty = auto-detect in the open workspace).
+
+So the end-to-end flow is: `./litellm/litellm-up.ts 3 20` → (auto-)import → done.
+
 ## manage-budget-key — mint / update / list keys
 
 Three equivalent implementations of the key tool. Each mints (or updates) a

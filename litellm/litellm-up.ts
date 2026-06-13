@@ -118,7 +118,10 @@ try {
 }
 
 console.log(
-	`\n\x1b[1;32m✅ Everything is up.\x1b[0m  Paste each key into a VS Code server entry (Base URL ${base}):\n`
+	`\n\x1b[1;32m✅ Everything is up.\x1b[0m  Register these in the extension with one click:\n` +
+		`   VS Code → command "LiteLLM: Import Budget Keys as Servers"\n` +
+		`   (or set litellm-vscode-chat.budgetKeys.autoImport = true for hands-free sync)\n` +
+		`\n  Base URL ${base}:\n`
 );
 const rows = groups.map((g) => {
 	const alias = `${g}-budget-${baseUser}_${g}`;
@@ -134,6 +137,8 @@ table.forEach((r, i) => {
 console.log(
 	`\nManage later:\n` +
 		`  • change limits (no re-paste):  ./litellm/litellm-up.ts <window_usd> <weekly_usd>\n` +
+		`  • re-sync the extension:        "LiteLLM: Import Budget Keys as Servers" (auto if enabled)\n` +
 		`  • see all keys + spend:         ./litellm/manage-budget-key.ts --list\n` +
+		`  • stop the proxy:               ./litellm/stop-litellm-proxy.ts\n` +
 		(existsSync(PROXY_LOG) ? `  • proxy logs:                   ${PROXY_LOG}\n` : "")
 );

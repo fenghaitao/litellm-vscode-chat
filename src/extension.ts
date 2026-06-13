@@ -5,6 +5,7 @@ import { IssueReporter, createIssueReporterEnv } from "./issueReporter";
 import { ServerRegistry } from "./extension/serverRegistry";
 import { StatusBarManager } from "./extension/status";
 import { BudgetStatusBar } from "./extension/budgetStatus";
+import { registerBudgetKeysImport } from "./extension/budgetKeysImport";
 import { registerHelpAndFeedbackCommand, registerTestCommands } from "./extension/commands";
 import { registerManageCommand } from "./extension/serverManagement";
 import { registerDiagnosticsCommand, buildDiagnosticsSnapshot } from "./extension/diagnostics";
@@ -87,6 +88,14 @@ export function activate(context: vscode.ExtensionContext) {
 	// Budget status bar (virtual-key spend windows, e.g. $3/5h + $20/1w)
 	const budgetStatusBar = new BudgetStatusBar(context, registry, outputChannel);
 	provider.setRequestCompleteCallback(() => budgetStatusBar.notifyRequestComplete());
+
+	// Import budgeted keys (from litellm-up.ts) as server entries — no manual paste.
+	registerBudgetKeysImport(context, registry, outputChannel, () => {
+		void provider
+			.prepareLanguageModelChatInformation({ silent: true }, new vscode.CancellationTokenSource().token)
+			.catch(() => undefined);
+		void vscode.commands.executeCommand("litellm.budgetRefresh");
+	});
 
 	// Welcome message
 	const hasShownWelcome = context.globalState.get<boolean>("litellm.hasShownWelcome", false);
