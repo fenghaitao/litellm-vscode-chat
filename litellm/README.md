@@ -7,43 +7,48 @@ soon as **either** cap is exhausted — mirroring Claude Code's two-tier limits.
 - a **weekly cap** — enforced on the *user* (aggregates across all their keys)
 - a **window cap** (default 5 hours) — enforced on the *key*
 
-## Quick start — one command
+## Complete workflow — two steps, then nothing
 
-If you just want it up with a 5h and a weekly dollar limit, run:
+The whole thing reduces to **one terminal command + one VS Code action**.
+
+**Step 1 — terminal (start everything with your two limits):**
 
 ```bash
 ./litellm/litellm-up.ts 3 20      # $3 / 5h  +  $20 / week  (per group)
 ```
 
-[`litellm-up.ts`](litellm-up.ts) (bun) does the whole flow: sets up
-PostgreSQL + Redis if needed, starts the proxy in the background if it isn't
-running, then ensures a budgeted key for each group (deepseek + copilot) —
-**created if missing, updated in place otherwise**, so re-running with new
-limits never rotates a secret. It prints the keys to paste into the extension.
+[`litellm-up.ts`](litellm-up.ts) (bun) does the whole server side: sets up
+PostgreSQL + Redis if needed, starts the proxy **in the background** (it keeps
+running after you close the terminal), then ensures a budgeted key per group
+(deepseek + copilot) and writes the secrets to `.litellm-budget-keys.json`.
 Each group gets its own user, so the weekly buckets are independent.
 
-The sections below cover the individual pieces `litellm-up.ts` orchestrates.
+**Step 2 — VS Code (register the keys, once):**
+
+Run the command **"LiteLLM: Import Budget Keys as Servers"** — it reads that
+file and registers a server entry per group (a CLI can't: the server registry
+is encrypted by VS Code). Or set **`litellm-vscode-chat.budgetKeys.autoImport: true`**
+once and even this is automatic — the extension imports on startup and whenever
+the file changes.
+
+That's it. The model picker now shows the DeepSeek + Copilot models, each
+governed by its budget.
+
+### Day-to-day
+
+| You want to… | Do this |
+| --- | --- |
+| **Change the limits** | `./litellm/litellm-up.ts <5h_usd> <week_usd>` — updates in place, **no secret rotation, no re-paste** (auto-import re-syncs if enabled). |
+| **Restart after a reboot** | `./litellm/litellm-up.ts 3 20` again — the proxy isn't a system service, so a reboot stops it. Keys are reused. |
+| **Stop the proxy** | `./litellm/stop-litellm-proxy.sh` (or `.py` / `.ts`). |
+| **See keys + spend** | `./litellm/manage-budget-key.ts --list`, or the status-bar budget widget. |
+
+> The proxy runs only while your machine is up since this setup intentionally
+> avoids a systemd service — so re-run `litellm-up.ts` after a reboot. With
+> `budgetKeys.autoImport` on, the extension re-syncs on its own.
 
 > Full proxy setup (Postgres/Redis, pricing, troubleshooting) lives in
 > [LITELLM_SETUP.md](LITELLM_SETUP.md).
-
-## Getting the keys into the VS Code extension (no paste)
-
-`litellm-up.ts` writes each minted secret to `.litellm-budget-keys.json`. The
-extension reads that file and registers a **server entry per group** for you —
-a CLI can't, because the server registry is encrypted by VS Code:
-
-- **One click:** run the command **"LiteLLM: Import Budget Keys as Servers"**.
-- **Hands-free:** set `litellm-vscode-chat.budgetKeys.autoImport: true` — the
-  extension then imports on startup and re-imports whenever the file changes, so
-  re-running `litellm-up.ts` keeps the extension in sync automatically.
-
-Re-importing is idempotent: a server with the group's label is **updated** (key
-swapped) rather than duplicated. Related settings:
-`budgetKeys.baseUrl` (default `http://localhost:4000`) and `budgetKeys.path`
-(empty = auto-detect in the open workspace).
-
-So the end-to-end flow is: `./litellm/litellm-up.ts 3 20` → (auto-)import → done.
 
 ## manage-budget-key — mint / update / list keys
 
